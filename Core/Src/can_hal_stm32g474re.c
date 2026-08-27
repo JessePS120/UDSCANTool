@@ -18,7 +18,7 @@ void Error_Handler(void){
 
 }
 
-void can_init(void)
+void CANInit(void)
 {
     FDCAN_FilterTypeDef sFilterConfig = {0};
 
@@ -92,7 +92,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
     }
 }
 
-void can_send(uint8_t *data, uint8_t len){ 
+void CANSend(uint8_t *data, uint8_t len){ 
     FDCAN_TxHeaderTypeDef txHeader;
     txHeader.Identifier = CAN_CLIENT_TX_ID;
     //TODO: should modify this later to support 29 bit frames. 
@@ -108,7 +108,7 @@ void can_send(uint8_t *data, uint8_t len){
     }
 }
 
-void can_receive(CANMsg *msg){ 
+void CANReceive(CANMsg *msg){ 
     if (rxRingBufSize == 0U){ 
         //No messages in the ring buffer. 
         msg = NULL;  

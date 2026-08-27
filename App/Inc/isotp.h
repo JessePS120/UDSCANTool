@@ -5,6 +5,8 @@
 extern "C" {
 #endif
 
+#define ISOTP_MAX_MESSAGE_SIZE 16 
+
 #ifdef __cplusplus
 }
 #endif

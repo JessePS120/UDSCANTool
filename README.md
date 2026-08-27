@@ -4,7 +4,7 @@ The purpose of this project is to create a client device that can send UDS reque
 of certain deliverables, see Docs/TRACEABILITY.md. 
 
 ## 2. Repo Structure 
-The repository contains two branches: "main" and "in-progress". Changes from the "in-progress" branch will be merged into main once they have been tested according to PROJECTREQUIREMENTS.md. 
+The repository contains two branches: "master" and "in-progress". Changes from the "in-progress" branch will be merged into master once they have been tested according to PROJECTREQUIREMENTS.md. 
 
 ## 3. Compiling 
 Code must be compiled using the STM32 cube IDE version 1.19.0. While not tested, newer versions should work. 

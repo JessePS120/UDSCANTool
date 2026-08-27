@@ -14,11 +14,11 @@ typedef struct CANMsg{
     uint8_t len; 
 }CANMsg; 
 
-void can_init(void);
+void CANInit(void);
 
-void can_send(uint8_t *data, uint8_t len);
+void CANSend(uint8_t *data, uint8_t len);
 
-void can_receive(CANMsg *msg); 
+void CANReceive(CANMsg *msg); 
 
 #ifdef __cplusplus
 }
