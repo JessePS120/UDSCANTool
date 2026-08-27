@@ -1,0 +1,27 @@
+# ==========================================
+# STM32CubeIDE / Eclipse Build Artifacts
+# ==========================================
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.o
+*.d
+*.su
+
+# ==========================================
+# IDE Metadata & User-Specific Settings
+# ==========================================
+.metadata/
+.settings/
+*.launch
+*.log
+
+# ==========================================
+# Toolchain & External Debugger Artifacts
+# ==========================================
+*.jlink
+*.i
+*.s
+
