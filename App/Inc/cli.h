@@ -5,6 +5,10 @@
 extern "C" {
 #endif
 
+void clientInit(void); 
+
+void clientStart(void); 
+
 #ifdef __cplusplus
 }
 #endif

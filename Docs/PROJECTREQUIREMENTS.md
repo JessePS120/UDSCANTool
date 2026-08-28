@@ -34,7 +34,7 @@ human-readable form over a debug/host interface.
 ## 3. Functional Requirements 
 ### 3.1 CAN Link Layer 
 - R-1: Client shall transmit and recieve 11-bit CAN 2.0B frames(phase 1) or 29 bit CAN 2.0B frames(phase 2). 
-- R-2: Client shall be able to switch CAN baud rate at build time(phase 2). 
+- R-2: Client shall be able to switch CAN baud rate at build time and via the terminal(phase 2). 
 - R-3: Receiving CAN messages **MUST** be interrupt driven to avoid polling as CAN messages would easily overwhelm the CPU(phase 1). 
 - R-4: Client shall use a device filter to filter out undesirable CAN messages(phase 1) configurable at build time or via the UART/USB interface(phase 2). 
 

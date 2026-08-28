@@ -1,22 +1,24 @@
 #include "can.h"
+#include "can_error.h"
+#include "cmsis_gcc.h"
 #include "stm32g4xx_hal.h"
 #include <stdint.h>
+#include <stdbool.h> 
+#include <string.h> 
 
-#define CAN_CLIENT_TX_ID      0x7E0U
-#define CAN_SERVER_RX_ID      0x7E8U
-#define rxRingBufMaxSize       16
+#define rxRingBufMaxSize 16
 
-static volatile FDCAN_RxHeaderTypeDef[rxRingBufMaxSize] rxRingBuf; 
+typedef struct canFrameWrapper{ 
+    FDCAN_RxHeaderTypeDef header; 
+    uint8_t data[8];
+}canFrameWrapper; 
+
+static volatile canFrameWrapper rxRingBuf[rxRingBufMaxSize]; 
 static volatile uint8_t rxRingBufHead = 0;
 static volatile uint8_t rxRingBufTail = 0;
 static volatile uint8_t rxRingBufSize = 0; 
 
 static FDCAN_HandleTypeDef hfdcan = {0}; 
-
-//Temp stub to avoid compiler errors. 
-void Error_Handler(void){ 
-
-}
 
 void CANInit(void)
 {
@@ -43,7 +45,7 @@ void CANInit(void)
     hfdcan.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
 
     if (HAL_FDCAN_Init(&hfdcan) != HAL_OK){
-        Error_Handler();
+        CANError(HAL_FDCAN_INIT); 
     }
 
     sFilterConfig.IdType = FDCAN_STANDARD_ID;
@@ -53,21 +55,21 @@ void CANInit(void)
     sFilterConfig.FilterID1 = CAN_SERVER_RX_ID;
     sFilterConfig.FilterID2 = 0x7FFU; 
     if (HAL_FDCAN_ConfigFilter(&hfdcan, &sFilterConfig) != HAL_OK){
-        Error_Handler();
+        CANError(HAL_FDCAN_CONFIG_FILTER); 
     }
 
     /* Reject anything not matched by the filter above; UDS doesn't use
      * remote frames. */
     if (HAL_FDCAN_ConfigGlobalFilter(&hfdcan, FDCAN_REJECT, FDCAN_REJECT,FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE) != HAL_OK){
-        Error_Handler();
+        CANError(HAL_FDCAN_CONFIG_GLOBAL_FILTER);
     }
 
     if (HAL_FDCAN_Start(&hfdcan) != HAL_OK){
-        Error_Handler();
+        CANError(HAL_FDCAN_START);
     }
 
     if (HAL_FDCAN_ActivateNotification(&hfdcan, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK){
-        Error_Handler();
+        CANError(HAL_FDCAN_ACTIVATE_NOTIFICATION);
     }
 
     //May need to change this priority later. 
@@ -83,8 +85,9 @@ void FDCAN1_IT0_IRQHandler(void)
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs){ 
     if ((RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0U){ 
         //Avoid copying messages into generic CANmsg struct until the user calls can_receive(). 
-        if (HAL_FDCAN_GetRxMessage(&hfdcan, FDCAN_RX_FIFO0, &rxRingBuf[rxRingBufTail], msg->data) != HAL_OK){
-           Error_Handler();
+        //Using local not global scope for hfdcan. 
+        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &rxRingBuf[rxRingBufTail].header, rxRingBuf[rxRingBufTail].data) != HAL_OK){
+           CANError(HAL_FDCAN_GET_RX_MESSAGE);
         }
         rxRingBufTail = (rxRingBufTail + 1) % rxRingBufMaxSize;
         //Ensure no overflow on rxRingBufSize. 
@@ -104,19 +107,21 @@ void CANSend(uint8_t *data, uint8_t len){
     txHeader.FDFormat = FDCAN_CLASSIC_CAN;
 
     if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan, &txHeader, data) != HAL_OK){
-        Error_Handler();
+        CANError(HAL_FDCAN_ADD_MESSAGE_TO_TX_FIFOQ);
     }
 }
 
-void CANReceive(CANMsg *msg){ 
+bool CANReceive(CANMsg *msg){
     if (rxRingBufSize == 0U){ 
         //No messages in the ring buffer. 
-        msg = NULL;  
-        return; 
+        return false; 
     }
-    msg->data = rxRingBuf[rxRingBufHead].data;
-    msg->id = rxRingBuf[rxRingBufHead].Identifier;
-    msg->len = rxRingBuf[rxRingBufHead].DataLength;
+    __disable_irq();
+    memcpy(msg->data, rxRingBuf[rxRingBufHead].data, rxRingBuf[rxRingBufHead].header.DataLength);
+    msg->id = rxRingBuf[rxRingBufHead].header.Identifier;
+    msg->len = rxRingBuf[rxRingBufHead].header.DataLength;
     rxRingBufHead = (rxRingBufHead + 1) % rxRingBufMaxSize; 
     rxRingBufSize--; 
+    __enable_irq();
+    return true; 
 }
