@@ -7,11 +7,15 @@
 extern "C" {
 #endif
 
+#define UARTRingBufMaxSize 64
+
 void UARTInit(void);
 
-void UARTSend(uint8_t *data, uint16_t len, bool isTerminated);
+void UARTSend(const char *data, uint16_t len, bool isTerminated);
 
-bool UARTReceive(uint8_t *byte);
+bool UARTReceive(char *byte);
+
+uint8_t UARTReceiveBuffer(char *buf);
 
 #ifdef __cplusplus
 }

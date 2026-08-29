@@ -1,16 +1,19 @@
-# UDS-over-CAN Device — Traceability (v0.2) 
+# UDS-over-CAN Device — Traceability (v0.4) 
 Note: See Docs/PROJECTREQUIREMENTS.md for requirements. 
 
 | Requirement | Files                                                                                                                     | Status       | Notes |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------- | ------------ | ----- |
-| R-1         | can.h, can_hal_stm32g474re.c                                                                                               | IN PROGRESS  |       |
+| R-1         | can.h, can_hal_stm32g474re.c                                                                                               | IN PROGRESS  | 11-bit standard ID TX/RX implemented via FDCAN; 29-bit (phase 2) not started |
 | R-2         | NONE                                                                                                                       | NOT STARTED  |       |
-| R-3         | can_hal_stm32g474re.c                                                                                                      | IN PROGRESS  |       |
-| R-4         | can_hal_stm32g474re.c                                                                                                      | IN PROGRESS  |       |
-| R-5         | isotp.h, isotp_cfg.h, isotp.c                                                                                             | IN PROGRESS  |       |
-| R-6         | isotp.h, isotp_cfg.h, isotp.c                                                                                             | IN PROGRESS  |       |
-| R-7         | isotp.h, isotp_cfg.h, isotp.c                                                                                             | IN PROGRESS  |       |
-| R-8         | isotp.h, isotp_cfg.h, isotp.c, isotp_error.h, isotp_error.c                                                               | IN PROGRESS  |       |
-| R-9         | can.h, isotp_cfg.h, isotp.c                                                                                               | IN PROGRESS  |       |
-| R-10        | uart.h, uart_hal_stm32g474re.c, cli.h, cli.c                                                                              | IN PROGRESS  |       |
-| R-11        | can_hal_stm32g474re.c, uart_hal_stm32g474re.c, can_error.c, isotp_error.c, uart_error.c, interrupt_hal_stm32g474re.c, led_hal_stm32g474re.c, timer_hal_stm32g474re.c | IN PROGRESS  |       |
+| R-3         | can_hal_stm32g474re.c                                                                                                      | IN PROGRESS  | RX fully interrupt-driven (FDCAN1_IT0_IRQHandler -> ring buffer) |
+| R-4         | can_hal_stm32g474re.c                                                                                                      | IN PROGRESS  | Hardware mask filter on CAN_SERVER_RX_ID build-time only, no UART reconfig yet (phase 2) |
+| R-5         | isotp.h, isotp_cfg.h, isotp.c                                                                                             | IN PROGRESS  | Single/First/Consecutive Frame segmentation and reassembly implemented; unit tested (Tests/isotp/) |
+| R-6         | isotp.h, isotp_cfg.h, isotp.c                                                                                             | IN PROGRESS  | Single Frame (<=7 bytes) implemented |
+| R-7         | isotp.h, isotp_cfg.h, isotp.c                                                                                             | IN PROGRESS  | FC sent on First Frame receipt; received block size/STmin honored when sending Consecutive Frames |
+| R-8         | isotp.h, isotp_cfg.h, isotp.c                                                                                             | IN PROGRESS  | N_Cr and N_Bs timeouts implemented and reported via ISOTPSTATUS but N_As/N_Ar is not yet implemented. Errors/isotp_error. removed, status enum now lives in isotp.h/isotp.c |
+| R-9         | can.h, isotp_cfg.h, isotp.c                                                                                               | IN PROGRESS  | Physical (1-to-1) addressing only, matches phase 1 |
+| R-10        | uds.h, uds.c, uds_cfg.h                                                                                                   | IN PROGRESS  | sendUdsRequest() builds SID + data PDU and sends/receives over isotp.c (R-5-R-9); unit tested (Tests/uds_client/). uds_client.h/.c and uds_server.h/.c exist as empty scaffolding for a future client/server split, not yet used |
+| R-11        | uds.h, uds.c, uds_cfg.h                                                                                                   | IN PROGRESS  | udsTesterPresent() and udsRequestVin() implemented and unit tested; not yet exposed as CLI commands (see R-13) |
+| R-12        | NONE                                                                                                                       | NOT STARTED  | List of additional UDS commands not yet defined in PROJECTREQUIREMENTS.md; UDS_SID enum in uds.h currently only has ReadDataByIdentifier and TesterPresent (covered by R-11) |
+| R-13        | uart.h, uart_hal_stm32g474re.c, cli.h, cli.c                                                                              | IN PROGRESS  | UART interface plus raw CAN/ISOTP send-receive CLI commands working; UDS request/response commands (uds.h/uds.c) not yet wired into cli.c |
+| R-15        | can_hal_stm32g474re.c, uart_hal_stm32g474re.c, interrupt_hal_stm32g474re.c, led_hal_stm32g474re.c, timer_hal_stm32g474re.c | IN PROGRESS  | Errors/ module removed and each HAL file now defines its own error enum/handler inline (e.g. CANERROR, UARTERROR) |

@@ -1,12 +1,38 @@
+#include "isotp.h"
+#include "isotp_cfg.h"
+#include "can.h"
+#include "timer.h"
 #include <stdint.h>
 #include <string.h>  
 #include <stdbool.h>
-#include "isotp.h"
-#include "isotp_cfg.h"
-#include "isotp_error.h"
-#include "can.h"
 
-uint8_t isotpBuf[4095] = {0}; 
+uint8_t isotpBuf[4095] = {0};
+
+//Indexed by designated initializer so the mapping stays correct even if ISOTPSTATUS
+//is reordered or given gaps later; any enumerator left without an initializer here
+//defaults to NULL, which the bounds/NULL check below catches.
+static const char *const isotpStatusStrings[] = {
+    [ISOTP_N_CR_TIMEOUT]                   = "ISOTP_N_CR_TIMEOUT",
+    [ISOTP_INVALID_CONSECUTIVE_FRAME]      = "ISOTP_INVALID_CONSECUTIVE_FRAME",
+    [ISOTP_SEQUENCE_NUMBER_MISMATCH]       = "ISOTP_SEQUENCE_NUMBER_MISMATCH",
+    [ISOTP_NO_FRAME_RECEIVED]              = "ISOTP_NO_FRAME_RECEIVED",
+    [ISOTP_INVALID_FIRST_FRAME_LENGTH]     = "ISOTP_INVALID_FIRST_FRAME_LENGTH",
+    [ISOTP_INVALID_FRAME_TYPE]             = "ISOTP_INVALID_FRAME_TYPE",
+    [ISOTP_N_BS_TIMEOUT]                   = "ISOTP_N_BS_TIMEOUT",
+    [ISOTP_INVALID_FLOW_CONTROL_FRAME]     = "ISOTP_INVALID_FLOW_CONTROL_FRAME",
+    [ISOTP_FLOW_CONTROL_FRAME_MAX_EXCEEDED]= "ISOTP_FLOW_CONTROL_FRAME_MAX_EXCEEDED",
+    [ISOTP_FLOW_CONTROL_OVERFLOW_ABORT]    = "ISOTP_FLOW_CONTROL_OVERFLOW_ABORT",
+    [ISOTP_INVALID_FLOW_CONTROL_STATUS]    = "ISOTP_INVALID_FLOW_CONTROL_STATUS",
+    [ISOTP_STATUS_OK]                      = "ISOTP_STATUS_OK",
+};
+
+const char *ISOTPSTATUStoString(ISOTPSTATUS status){
+    uint8_t index = (uint8_t)status;
+    if(index >= (sizeof(isotpStatusStrings) / sizeof(isotpStatusStrings[0])) || isotpStatusStrings[index] == NULL){
+        return "ISOTP_STATUS_UNKNOWN";
+    }
+    return isotpStatusStrings[index];
+}
 
 static void sendFlowCtrlFrame(uint8_t flowStatus, uint8_t blockSize, uint8_t stMin){ 
     CANMsg flowCtrlFrame; 
@@ -18,7 +44,7 @@ static void sendFlowCtrlFrame(uint8_t flowStatus, uint8_t blockSize, uint8_t stM
     CANSend(flowCtrlFrame.data, flowCtrlFrame.len); 
 }
 
-static void receiveConsecutiveFrame(IsoTpMsg *msg, uint16_t remainingBytes){ 
+static ISOTPSTATUS receiveConsecutiveFrame(IsoTpMsg *msg, uint16_t remainingBytes){ 
     //Index for consecutive frames should start at 1. 
     uint8_t seqNum = 1; 
     while(remainingBytes > 0){ 
@@ -27,37 +53,38 @@ static void receiveConsecutiveFrame(IsoTpMsg *msg, uint16_t remainingBytes){
         while(!CANReceive(&frame)){
             if(GetTickMS() >= deadline){
                 //N_Cr timeout sender didn't deliver the next CF in time.
-                IsoTpError(ISOTP_N_CR_TIMEOUT);
-                return;
+                return ISOTP_N_CR_TIMEOUT; 
             }
         }
         if((frame.data[0] & 0xF0) != 0x20){
             //Not a consecutive frame.
-            IsoTpError(ISOTP_INVALID_CONSECUTIVE_FRAME);
-            return;
+            return ISOTP_INVALID_CONSECUTIVE_FRAME;
         }
         if(((frame.data[0] & 0x0F) != seqNum)){
             //Sequence number does not match expected value.
-            IsoTpError(ISOTP_SEQUENCE_NUMBER_MISMATCH);
-            return;
+            return ISOTP_SEQUENCE_NUMBER_MISMATCH;
         }
-        uint16_t bytesToCopy = (remainingBytes < 7) ? remainingBytes : 7; 
-        memcpy(&isotpBuf[msg->len-remainingBytes], &frame.data[1], bytesToCopy); 
-        remainingBytes -= bytesToCopy; 
-        //This is a four bit rolling counter. 
+        uint16_t bytesToCopy = (remainingBytes < 7) ? remainingBytes : 7;
+        memcpy(&isotpBuf[msg->len-remainingBytes], &frame.data[1], bytesToCopy);
+        remainingBytes -= bytesToCopy;
+        //This is a four bit rolling counter.
         seqNum = (seqNum + 1) & 0x0F;
     }
+    return ISOTP_STATUS_OK;
 }
 
-void getFrames(IsoTpMsg *msg){ 
-    msg->len = 0; 
-    msg->data = NULL; 
-    CANMsg frame;  
-    //Keep msg->data NULL and return. 
-    if(!CANReceive(&frame)){ 
-        return; 
+ISOTPSTATUS getFrames(IsoTpMsg *msg, uint32_t timeoutMs){
+    msg->len = 0;
+    msg->data = NULL;
+    CANMsg frame;
+    uint32_t deadline = GetTickMS() + timeoutMs;
+    while(!CANReceive(&frame)){
+        if(GetTickMS() >= deadline){
+            //No frame arrived within the timeout window, keep msg->data NULL and return.
+            return ISOTP_NO_FRAME_RECEIVED;  
+        }
     }
-    msg->data = &isotpBuf[0]; 
+    msg->data = &isotpBuf[0];
     msg->id = frame.id;
     //Single frame message.
     if((frame.data[0] & 0xF0) == 0x00){  
@@ -70,27 +97,32 @@ void getFrames(IsoTpMsg *msg){
         msg->len = ((frame.data[0] & 0x0F) << 8) | frame.data[1]; 
         if(msg->len <= 6){
             //Not a valid first frame message as it should be a single frame.
-            IsoTpError(ISOTP_INVALID_FIRST_FRAME_LENGTH);
+            return ISOTP_INVALID_FIRST_FRAME_LENGTH; 
         }
         else{
             memcpy(isotpBuf, &frame.data[2], 6);
             sendFlowCtrlFrame(0x00, BLOCK_SIZE, STMIN);
-            receiveConsecutiveFrame(msg, msg->len - 6);
+            ISOTPSTATUS status = receiveConsecutiveFrame(msg, msg->len - 6);
+            if(status != ISOTP_STATUS_OK){
+                return status;
+            }
         }
     }
     else{
         //Invalid frame type.
-        IsoTpError(ISOTP_INVALID_FRAME_TYPE);
+        return ISOTP_INVALID_FRAME_TYPE;
     }
+    return ISOTP_STATUS_OK;
 }
 
-void sendFrame(uint8_t *data, uint16_t len){ 
+ISOTPSTATUS sendFrame(const uint8_t *data, uint16_t len){ 
     uint8_t frame[8] = {0}; 
     if(len <= 7){ 
         //Send single frame message. 
-        frame[0] = len & 0x0F; 
+        frame[0] = len & 0x0F;
         memcpy(&frame[1], data, len);
-        CANSend(frame, len + 1); 
+        CANSend(frame, len + 1);
+        return ISOTP_STATUS_OK;
     }
     else{ 
         //Send first frame. 
@@ -109,39 +141,34 @@ void sendFrame(uint8_t *data, uint16_t len){
         uint8_t framesSentInBlock = 0; 
         uint8_t bytesToSend = 0; 
 
-        while(true){ 
+        while(1){
             deadline = GetTickMS() + ISOTP_N_BS_MS;
             while(!CANReceive(&flowCtrlFrame)){
                 if(GetTickMS() >= deadline){
                     //N_BS timeout receiver didn't deliver the flow control frame in time.
-                    IsoTpError(ISOTP_N_BS_TIMEOUT);
-                    return;
+                    return ISOTP_N_BS_TIMEOUT; 
                 }
             }
             if((flowCtrlFrame.data[0] & 0xF0) != 0x30){
                 //Not a flow control frame.
-                IsoTpError(ISOTP_INVALID_FLOW_CONTROL_FRAME);
-                return;
+                return ISOTP_INVALID_FLOW_CONTROL_FRAME; 
             }
             if(flowCtrlFrameCount >= ISOTP_FLOW_CONTROL_FRAME_MAX){
                 //Exceeded max number of flow control frames.
-                IsoTpError(ISOTP_FLOW_CONTROL_FRAME_MAX_EXCEEDED);
-                return;
+                return ISOTP_FLOW_CONTROL_FRAME_MAX_EXCEEDED; 
             }
             flowCtrlFrameCount++;
             fcFlag = flowCtrlFrame.data[0] & 0x0F;
             if (fcFlag == 0x02){
                 //Overflow/abort flow control frame.
-                IsoTpError(ISOTP_FLOW_CONTROL_OVERFLOW_ABORT);
-                return;
+                return ISOTP_FLOW_CONTROL_OVERFLOW_ABORT; 
             }
             else if(fcFlag == 0x01){
                 continue;
             }
             else if(fcFlag != 0x0){
                 //Handle all other possible FC values.
-                IsoTpError(ISOTP_INVALID_FLOW_CONTROL_STATUS);
-                return;
+                return ISOTP_INVALID_FLOW_CONTROL_STATUS; 
             }
             //We will only get here if a flow control frame allowing us to continue is recieved. 
             //Flow control frame received, send consecutive frames. 
@@ -160,11 +187,12 @@ void sendFrame(uint8_t *data, uint16_t len){
                 //Delay for STmin. Adding some buffer here for any timing inconsistencies. 
                 delayMS(stMin+10); 
             }
-            if(remainingBytes > 0){ 
-                continue; 
-            } 
-            break; 
+            if(remainingBytes > 0){
+                continue;
+            }
+            break;
         }
+        return ISOTP_STATUS_OK;
     }
 }
 

@@ -31,6 +31,8 @@
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+#include <stdint.h>
+
 /* Fallback for __has_builtin */
 #ifndef __has_builtin
   #define __has_builtin(x) (0)

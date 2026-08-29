@@ -14,7 +14,7 @@ target_include_directories(test_isotp PRIVATE ${APP_INC})
 
 add_executable(test_uds_client
     uds_client/test_uds_client.c
-    ${APP_SRC}/uds_client.c
+    ${APP_SRC}/uds.c
 )
 target_include_directories(test_uds_client PRIVATE ${APP_INC})
 

@@ -21,7 +21,8 @@
 # ==========================================
 # Toolchain & External Debugger Artifacts
 # ==========================================
+Debug/
+Release/
 *.jlink
 *.i
-*.s
 
