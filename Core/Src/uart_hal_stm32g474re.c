@@ -23,8 +23,8 @@ typedef enum UARTERROR{
 }UARTERROR; 
 
 static const uint32_t errorDelaysMs[] = {
-    [BSP_COM_INIT]     = 1000,
-    [HAL_UART_RECEIVE_IT] = 2000,
+    [BSP_COM_INIT]         = 1000,
+    [HAL_UART_RECEIVE_IT]  = 2000,
     [HAL_UART_TRANSMIT]    = 3000,
 };
 
