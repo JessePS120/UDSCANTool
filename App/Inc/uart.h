@@ -8,6 +8,9 @@ extern "C" {
 #endif
 
 #define UARTRingBufMaxSize 64
+//Avoid changing this macro name unless the change is reflected in 
+//serial.py. 
+#define UART_BAUD_RATE 115200 
 
 void UARTInit(void);
 

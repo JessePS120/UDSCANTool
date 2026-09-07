@@ -43,12 +43,13 @@ typedef enum UdsStatus{
     UDS_STATUS_TRANSPORT_ERROR,
     UDS_STATUS_INVALID_RESPONSE,
     UDS_STATUS_REQUEST_TOO_LARGE,
+    UDS_STATUS_COMMAND_NOT_FOUND,
 }UdsStatus;
 
 const char *UdsStatustoString(UdsStatus status);
 
 typedef struct UdsResult{
-    UdsStatus status;
+    UdsStatus UDSStatus;
     ISOTPSTATUS isotpStatus;
 }UdsResult;
 
@@ -63,6 +64,8 @@ UdsResult sendUdsRequest(uint8_t sid, uint8_t *data, uint16_t len, UdsResponse *
 
 UdsResult udsTesterPresent(UdsResponse *response);
 UdsResult udsRequestVin(UdsResponse *response);
+//Call from client/server code. 
+UdsResult sendUDSCmd(const char *cmd, UdsResponse *response);
 
 #ifdef __cplusplus
 }

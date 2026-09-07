@@ -29,6 +29,7 @@ static const char *const udsStatusStrings[] = {
     [UDS_STATUS_TRANSPORT_ERROR]   = "UDS_STATUS_TRANSPORT_ERROR",
     [UDS_STATUS_INVALID_RESPONSE]  = "UDS_STATUS_INVALID_RESPONSE",
     [UDS_STATUS_REQUEST_TOO_LARGE] = "UDS_STATUS_REQUEST_TOO_LARGE",
+    [UDS_STATUS_COMMAND_NOT_FOUND] = "UDS_STATUS_COMMAND_NOT_FOUND",
 };
 
 const char *UdsStatustoString(UdsStatus status){
@@ -94,6 +95,7 @@ UdsResult sendUdsRequest(uint8_t sid, uint8_t *data, uint16_t len, UdsResponse *
     }
 }
 
+//Functions for each UDS command. 
 UdsResult udsTesterPresent(UdsResponse *response){
     uint8_t subFunction = 0x00;
     return sendUdsRequest(UDS_SID_TESTER_PRESENT, &subFunction, 1, response);
@@ -103,3 +105,24 @@ UdsResult udsRequestVin(UdsResponse *response){
     uint8_t pdu[2] = { (uint8_t)(UDS_DID_VIN >> 8), (uint8_t)(UDS_DID_VIN & 0xFF) };
     return sendUdsRequest(UDS_SID_READ_DATA_BY_IDENTIFIER, pdu, sizeof(pdu), response);
 }
+
+//Generic UDS function exposed for use by the client/server. Avoid calling specific UDS commands directly due 
+//to lack of error handling. 
+UdsResult sendUDSCmd(const char *cmd, UdsResponse *response){
+    //Setting to default value.
+    *response = (UdsResponse){0};
+
+    //Trim a trailing CRLF, CR, or LF so the command matches regardless of the terminal's line ending.
+    size_t len = strlen(cmd);
+    while(len > 0 && (cmd[len - 1] == '\r' || cmd[len - 1] == '\n')){
+        len--;
+    }
+    if(len == strlen("TESTERPRESENT") && strncmp(cmd, "TESTERPRESENT", len) == 0){
+        return udsTesterPresent(response);
+    }
+    else if(len == strlen("VIN") && strncmp(cmd, "VIN", len) == 0){
+        return udsRequestVin(response);
+    }
+    return (UdsResult){UDS_STATUS_COMMAND_NOT_FOUND, ISOTP_STATUS_OK};
+}
+

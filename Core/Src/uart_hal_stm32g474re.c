@@ -46,7 +46,7 @@ static uint8_t rxByte = 0;
 
 void UARTInit(void){
     COM_InitTypeDef comInit;
-    comInit.BaudRate   = 115200;
+    comInit.BaudRate   = UART_BAUD_RATE;
     comInit.WordLength = COM_WORDLENGTH_8B;
     comInit.StopBits   = COM_STOPBITS_1;
     comInit.Parity     = COM_PARITY_NONE;
@@ -59,6 +59,10 @@ void UARTInit(void){
     //May need to change this priority later.
     HAL_NVIC_SetPriority(LPUART1_IRQn, 6, 0);
     HAL_NVIC_EnableIRQ(LPUART1_IRQn);
+
+    if (HAL_UART_Receive_IT(&hcom_uart[COM1], &rxByte, 1) != HAL_OK){
+        UARTError(HAL_UART_RECEIVE_IT);
+    }
 }
 
 void LPUART1_IRQHandler(void){
@@ -103,7 +107,6 @@ bool UARTReceive(char *byte){
 
 uint8_t UARTReceiveBuffer(char *buf){
     uint8_t count;
-
     __disable_irq();
     count = rxRingBufSize;
     if (count > 0U){
