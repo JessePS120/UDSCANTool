@@ -23,6 +23,11 @@ class SerialLayer:
     def is_connected(self) -> bool:
         return self._ser is not None and self._ser.is_open
 
+    @property 
+    def bytes_ready(self) -> bool: 
+        if self.is_connected: 
+            return self._ser.in_waiting
+
     def connect(self, port: str) -> None:
         #Only one connection at a time for now.
         self.close()
@@ -33,10 +38,10 @@ class SerialLayer:
             self._ser.close()
             self._ser = None
 
-    def send(self, data: bytes) -> None:
+    def send(self, data: str) -> None:
         if not self.is_connected:
             raise RuntimeError("Not connected to a serial port.")
-        self._ser.write(data)
+        self._ser.write(str.encode('utf-8'))
 
     def read_line(self) -> str:
         if not self.is_connected:

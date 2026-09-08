@@ -1,6 +1,7 @@
 #include "cli.h"
 #include "led.h"
 #include "uart.h"
+#include "uart_buf.h"
 #include "can.h"
 #include "timer.h" 
 #include "isotp.h"
@@ -23,32 +24,23 @@ void clientInit(void){
     //TODO: add other functions here like the system clock and any GPIO. 
 }
 
-//TODO: This code needs to be refactored so that the UART module handles its own buffer and exposes a set of commands 
-//to append to this buffer. 
+char UARTBuf[UARTRingBufMaxSize] = {0};
+
 void clientStart(void){
-    char UARTBuf[UARTRingBufMaxSize] = {0};
     uint8_t UARTBytes = 0;
     UARTSend("Waiting for response\r\n", 0, true); 
-    do{
-        UARTBytes = UARTReceiveBuffer(UARTBuf);
-        delayMS(250); 
-    } while(UARTBytes == 0U);
-    
+    UARTBufPoll(UARTBuf, sizeof(UARTBuf)); 
     snprintf((char *)(UARTBuf), sizeof(UARTBuf), "The current UART buffer Is limited to %d bytes\r\n", sizeof(UARTBuf));
     UARTSend(UARTBuf, 0, true); 
     while(1){
+        UARTFlushBuf();
         UARTSend("Would you like to send/receive a message(s) over CAN Classic or ISOTP?(CANS/CANR/ISOTPS/ISOTPR/UDS)\r\n", 0, true);
-        do{
-            delayMS(250);
-            UARTBytes = UARTReceiveBuffer(UARTBuf); 
-        } while(UARTBytes == 0);
-        if(UARTBytes >= 4 && (strncmp(UARTBuf, "CANS", 4) == 0)){
+        UARTBufPoll(UARTBuf, sizeof(UARTBuf));
+        if(strcmp(UARTBuf, "CANS") == 0){
+            UARTFlushBuf(); 
             while(1){
                 UARTSend("Enter the byte(s) you would like to send!\r\n", 0, true);
-                do{
-                    UARTBytes = UARTReceiveBuffer(UARTBuf);
-                    delayMS(250); 
-                } while(UARTBytes == 0);
+                UARTBytes = UARTBufPoll(UARTBuf, sizeof(UARTBuf)); 
                 if(UARTBytes > 8){
                     UARTSend("Error, cannot send more than 8 bytes over CAN Classic\r\n", 0, true);
                 }
@@ -59,24 +51,25 @@ void clientStart(void){
                 }
             }
         }
-        else if(UARTBytes >= 6 && (strncmp(UARTBuf, "ISOTPS", 6) == 0)){
+        else if(strcmp(UARTBuf, "ISOTPS") == 0){
+            UARTFlushBuf(); 
             UARTSend("Enter the byte(s) you would like to send!\r\n", 0, true);
-            do{
-                UARTBytes = UARTReceiveBuffer(UARTBuf);
-                delayMS(250); 
-            } while(UARTBytes == 0);
+            UARTBytes = UARTBufPoll(UARTBuf, sizeof(UARTBuf)); 
             ISOTPSTATUS status = sendFrame((uint8_t *)UARTBuf, UARTBytes);
             if(status != ISOTP_STATUS_OK){ 
-                UARTSend(ISOTPSTATUStoString(status), 0, true); 
+                snprintf((char *)UARTBuf, sizeof(UARTBuf), "%s\r\n", ISOTPSTATUStoString(status));
+                UARTSend(UARTBuf, 0, true); 
             }
             delayMS(500);
         }
-        else if(UARTBytes >= 4 && (strncmp(UARTBuf, "CANR", 4) == 0)){
+        else if(strcmp(UARTBuf, "CANR") == 0){
+            UARTFlushBuf(); 
             UARTSend("Printing received CAN message. Enter any character to stop\r\n", 0, true);
             CANMsg msg = {0};
             while(1){
-                UARTBytes = UARTReceiveBuffer(UARTBuf);
-                if(UARTBytes > 0){
+                if(UARTReceive((char *)&UARTBytes)){
+                    delayMS(50); 
+                    UARTFlushBuf(); 
                     break;
                 }
                 if(CANReceive(&msg)){
@@ -92,12 +85,14 @@ void clientStart(void){
                 }
             }
         }
-        else if(UARTBytes >= 6 && (strncmp(UARTBuf, "ISOTPR", 6) == 0)){
+        else if(strcmp(UARTBuf, "ISOTPR") == 0){
+            UARTFlushBuf(); 
             UARTSend("Printing received ISOTP message. Enter any character to stop\r\n", 0, true);
             IsoTpMsg msg = {0};
             while(1){
-                UARTBytes = UARTReceiveBuffer(UARTBuf);
-                if(UARTBytes > 0){
+                if(UARTReceive((char *)&UARTBytes)){
+                    delayMS(50); 
+                    UARTFlushBuf(); 
                     break;
                 }
                 ISOTPSTATUS status = getFrames(&msg, 250);
@@ -118,14 +113,10 @@ void clientStart(void){
                 }
             }
         }
-        else if(UARTBytes >= 3 && (strncmp(UARTBuf, "UDS", 3) == 0)){ 
+        else if(strcmp(UARTBuf, "UDS") == 0){
+            UARTFlushBuf();
             UARTSend("Enter the message you would like to send!\r\n", 0, true);
-            do{
-                UARTBytes = UARTReceiveBuffer(UARTBuf);
-                delayMS(250);
-            } while(UARTBytes == 0);
-            //UARTReceiveBuffer does not null-terminate; sendUDSCmd expects a C string.
-            UARTBuf[(UARTBytes < sizeof(UARTBuf)) ? UARTBytes : sizeof(UARTBuf) - 1] = '\0';
+            UARTBytes = UARTBufPoll(UARTBuf, sizeof(UARTBuf));
             UdsResponse response = {0};
             UdsResult result = sendUDSCmd(UARTBuf, &response);
             if(result.UDSStatus != UDS_STATUS_OK || result.isotpStatus != ISOTP_STATUS_OK){

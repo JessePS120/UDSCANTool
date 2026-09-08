@@ -105,6 +105,12 @@ bool UARTReceive(char *byte){
     return true;
 }
 
+void UARTFlushBuf(void){
+    rxRingBufHead = 0; 
+    rxRingBufTail = 0; 
+    rxRingBufSize = 0; 
+}
+
 uint8_t UARTReceiveBuffer(char *buf){
     uint8_t count;
     __disable_irq();

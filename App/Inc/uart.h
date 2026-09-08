@@ -18,6 +18,8 @@ void UARTSend(const char *data, uint16_t len, bool isTerminated);
 
 bool UARTReceive(char *byte);
 
+void UARTFlushBuf(void); 
+
 uint8_t UARTReceiveBuffer(char *buf);
 
 #ifdef __cplusplus

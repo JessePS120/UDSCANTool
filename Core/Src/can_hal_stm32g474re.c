@@ -42,11 +42,8 @@ static const char *const errorMessages[] = {
 
 static void CANError(CANERROR error){
     disableInterrupts();
-
-    UARTSend(errorMessages[error], 0, true);
-
-    while(1)
-        ;
+    UARTSend(errorMessages[error], 0, true); 
+    enableInterrupts(); 
 }
 
 void CANInit(void)
