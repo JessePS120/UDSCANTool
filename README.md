@@ -1,8 +1,8 @@
 # UDSCANTool
 
-A standalone UDS (ISO 14229-1) diagnostic tester built on an STM32 Nucleo-G474RE. The board
-can generated UDS messages over ISO-TP (ISO 15765-2) on a classic CAN 2.0B bus, and is driven either from a
-plain serial terminal or from the bundled Python GUI over the ST-Link virtual COM port.
+This repo contains code for a standalone UDS (ISO 14229-1) diagnostic tester built for a STM32 Nucleo-G474RE. The nucleo board
+can generated UDS messages over ISO-TP (ISO 15765-2) on a CAN 2.0B bus, and is interactable vai a
+serial terminal or from the included Python GUI over the ST-Link virtual port.
 
 ---
 
@@ -10,18 +10,18 @@ plain serial terminal or from the bundled Python GUI over the ST-Link virtual CO
 
 ### 1.1 What it does
 
-The device acts as a **UDS client (tester)**. You issue a command from the host, the firmware
-builds the UDS request, segments it through ISO-TP, puts it on the CAN bus, waits for the
-server's response, reassembles it, and prints the decoded result back to the host.
+The nucleo board acts as a **UDS client (tester)**. You can issue a command from the terminal/GUI, the nucleo board 
+inteprets it, assembles the UDS message then sends it over CAN via iso-tp. The nucleo board then receives the response
+from the UDS server and sends it over UART. 
 
 Current capabilities:
 
-- **Raw CAN** — send an arbitrary frame (up to 8 bytes) and stream received frames live.
-- **UDS TesterPresent** (SID `0x3E`) — keep-alive / bus liveness check.
-- **UDS VIN read** — ReadDataByIdentifier (SID `0x22`) against DID `0xF190`.
+- **Raw CAN** — send a CAN frame (up to 8 bytes) and view CAN messages from the bus. 
+- **UDS TesterPresent** (SID `0x3E`) — UDS keep alive command used by most ECUs. 
+- **UDS VIN read** — ReadDataByIdentifier (SID `0x22`) to read certain values such as the VIN. 
 - **Negative response decoding** — NRCs are translated to readable text rather than raw bytes.
 
-Addressing is physical 1-to-1: the tester transmits on **`0x7E0`** and accepts responses on
+Addressing is  1 to 1: the tester transmits on **`0x7E0`** and accepts responses on
 **`0x7E8`** (see [cli.h](App/cli/cli.h)). The bus runs at **500 kbit/s**, classic CAN, 11-bit
 identifiers.
 
@@ -30,7 +30,7 @@ for requirement implementation status see [Docs/TRACEABILITY.md](Docs/TRACEABILI
 
 ### 1.2 Architecture
 
-The firmware is layered so that everything above the HAL wrapper is portable C:
+The firmware is layered so that everything above the HAL wrapper is portable to other platforms:
 
 ```
         Host (PC)
@@ -64,35 +64,35 @@ The firmware is layered so that everything above the HAL wrapper is portable C:
 
 | Path | Contents |
 | --- | --- |
-| [App/cli/](App/cli/) | Console loop, command dispatch, peripheral bring-up order |
+| [App/cli/](App/cli/) | Console loop, command dispatch, and peripheral bring-up order |
 | [App/uds/](App/uds/) | UDS request building, response/NRC parsing, timing config |
-| [App/isotp-c/](App/isotp-c/) | Vendored [isotp-c](https://github.com/lishen2/isotp-c) library plus the project's port layer (`isotp_port.c`, `isotp_user.c`) |
-| [App/can/](App/can/) | Portable CAN interface (`CANInit`, `CANSend`, `CANReceive`) |
-| [App/uart/](App/uart/) | Portable UART interface and the RX ring buffer |
-| [Core/Src/](Core/Src/) | STM32G474RE HAL implementations of the above interfaces, plus CubeMX-generated startup code |
-| [Utils/](Utils/) | Utility functions: `Status` codes, deferred logger, timer, LED, critical sections |
+| [App/isotp-c/](App/isotp-c/) | Vendored [isotp-c](https://github.com/lishen2/isotp-c) library plus wrappers (`isotp_port.c`, `isotp_user.c`) |
+| [App/can/](App/can/) | CAN interface and ring buffer(`CANInit`, `CANSend`, `CANReceive`) |
+| [App/uart/](App/uart/) | UART interface and ring buffer|
+| [Core/Src/](Core/Src/) | STM32G474RE HAL implementations of the above interfaces plus the CubeMX-generated startup code |
+| [Utils/](Utils/) | Utility functions: `Status` codes, logger, timer, LED, critical sections |
 | [GUI/](GUI/) | Python GUI application |
-| [Docs/](Docs/) | Requirements and traceability matrix |
+| [Docs/](Docs/) | Requirements and traceability |
 | [Drivers/](Drivers/) | ST HAL and CMSIS (vendored, do not edit) |
 
 ### 1.4 Conventions
 
 - **Error handling.** Every function that requires error handling returns a `Status` enum from
   [Utils/status.h](Utils/status.h) (`STATUS_OK`, `STATUS_TIMEOUT`, `STATUS_PROTOCOL_ERROR`, ...).
-  Callers propagate it upward while the CLI is the only layer that turns a `Status` into text sent over 
+  Callers propagate it upward while the CLI is the only layer that turns a `Status` enum into text sent over 
   UART. 
-- **Logging.** `LOG_ERROR` / `LOG_WARN` / `LOG_INFO` in [Utils/log.h](Utils/log.h) write into a
-  ring buffer that is drained to UART outside of interrupt context by `logDrain()`. This keeps
+- **Logging.** `LOG_ERROR` / `LOG_WARN` / `LOG_INFO` in [Utils/log.h](Utils/log.h) writes into a
+  ring buffer that is sent over UART outside of interrupts `logDrain()`. This keeps
   ISRs free of blocking I/O.
-- **Hardware abstraction.** Nothing under `App/` includes an STM32 header. Porting to another
-  MCU means reimplementing the `*_hal_*.c` files in `Core/Src/`.
-- **Interrupt-driven RX.** CAN and UART reception both land in ring buffers from their ISRs and
+- **Hardware abstraction.** Nothing under `App/` includes an STM32 specific code Porting to another
+  MCU requires you to reimplement the `*_hal_*.c` files in `Core/Src/`.
+- **Interrupt-driven RX.** CAN and UART bytes are stored in ring buffers from their ISRs and
   the application polls those buffers. 
 
 ### 1.5 Branches
 
-Two branches: **`master`** and **`in-progress`**. Work lands on `in-progress` and is merged into
-`master` once tested against [Docs/PROJECTREQUIREMENTS.md](Docs/PROJECTREQUIREMENTS.md).
+Two branches exist: **`master`** and **`in-progress`**. Minor changes are pushed into `in-progress` which is merged into
+`master` once tested as required by [Docs/PROJECTREQUIREMENTS.md](Docs/PROJECTREQUIREMENTS.md).
 
 ---
 
@@ -103,11 +103,11 @@ Two branches: **`master`** and **`in-progress`**. Work lands on `in-progress` an
 | Item | Purpose | Notes |
 | --- | --- | --- |
 | ST Nucleo-G474RE | Main board (STM32G474RET6, 170 MHz) | Has an FDCAN controller but **no** on-board transceiver |
-| SN65HVD230 breakout | CAN transceiver | 3.3 V logic, so it pairs directly with the G474 |
-| 2 x 120 ohm resistors | Bus termination | One at each physical end of the bus |
-| Twisted pair wire | CAN_H / CAN_L | Keep stubs short |
+| SN65HVD230 breakout | CAN transceiver | requires 3.3V only so it works with the G474 |
+| 2 x 120 ohm resistors | Bus termination | Place one at each end of the CAN bus |
+| Twisted pair wire | CAN_H / CAN_L | Try to keep wire length short |
 | CANable (or second Nucleo) | Counterpart under test | Acts as the UDS server / traffic source |
-| USB Micro-B cable | For Power, flashing, and the serial console | The ST-Link VCP carries the CLI, so that no extra USB-UART adapter is needed |
+| USB Micro-B cable | For Power, flashing, and the serial console | The ST-Link works with the CLI so that no extra USB-UART adapter is needed |
 
 ### 2.2 Pin assignment
 
@@ -125,8 +125,7 @@ Transceiver power: `3V3` and `GND` from the Nucleo's Morpho/Arduino headers.
 ### 2.3 Bus timing
 
 Configured in [can_hal_stm32g474re.c](Core/Src/can_hal_stm32g474re.c): FDCAN is clocked from
-PCLK1 at 170 MHz, prescaler 10, giving a 34 tq bit time (`TimeSeg1 = 29`, `TimeSeg2 = 4`,
-`SJW = 4`) for **500 kbit/s** with the sample point at roughly 88%. Frame format is classic CAN
+ for **500 kbit/s** with a sample point at roughly 88%. The frame format is classic CAN
 with bit-rate switching off.
 
 ## 3. Building and running
@@ -134,19 +133,18 @@ with bit-rate switching off.
 ### 3.1 Firmware
 
 **Requirements:** [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html)
-**1.19.0**. Newer versions should work but are untested. The Arm GNU toolchain and ST-Link
-drivers ship with the IDE.
+**1.19.0**. Newer versions should work but are untested.
 
 1. `File > Open Projects from File System...` and select the repository root. The project is
    recognized from `.project` / `.cproject`; do **not** use `Import > Existing Project` on a copy
    of the folder.
 2. Connect the Nucleo over USB Micro-B (the `CN1` ST-Link connector).
-3. `Project > Build Project` (Ctrl+B). Artifacts land in `Debug/` (git-ignored).
-4. `Run > Debug As > STM32 C/C++ Application`, or click Run to flash and go.
+3. `Project > Build Project` (Ctrl+B). Artifacts will land in `Debug/` (git-ignored).
+4. `Run > Debug As > STM32 C/C++ Application`, or click Run to flash. 
 
 Peripheral configuration lives in [UDSCANTool.ioc](UDSCANTool.ioc). Regenerating from CubeMX
-rewrites `Core/Src/main.c` and `Core/Src/stm32g4xx_hal_msp.c`, so keep any custom code inside the
-`USER CODE BEGIN/END` markers. Generally, it is not recommended to regenerate any code. 
+rewrites `Core/Src/main.c` and `Core/Src/stm32g4xx_hal_msp.c`, so you should keep any custom code inside the
+`USER CODE BEGIN/END` comments. Generally, it is not recommended to regenerate any code. 
 
 Key compile-time macros:
 
@@ -161,15 +159,14 @@ Key compile-time macros:
 | `MAX_UDS_MSG_SIZE` | [App/uds/uds_cfg.h](App/uds/uds_cfg.h) | `100` |
 | `LOG_LEVEL` | [Utils/log.h](Utils/log.h) | `LOG_LEVEL_INFO` |
 
-If you change `UART_BAUD_RATE` the GUI picks it up automatically because it parses the macro
-straight out of the header (see 3.3).
+If you change `UART_BAUD_RATE` the GUI detects the change automatically because it parses the macro
+from header file directly (see 3.3).
 
 ### 3.2 Using the serial console
 
-Any terminal works (PuTTY, `screen`, the CubeIDE terminal). Open the ST-Link virtual COM port at
-**115200 8N1**. The firmware prints `Enter CMD` when it is ready for input.
+Any terminal should work (PuTTY, `screen`, the CubeIDE terminal) but only PuTTY has been tested. Open the ST-Link virtual COM port at a baud rate of **115200**. The board prints `Enter CMD` when it is ready for input.
 
-Every command is `KEYWORD:ARGUMENT` and the colon is mandatory.
+Every command is structured as `KEYWORD:ARGUMENT`. NOTE: The colon is mandatory. 
 
 | Command | Effect |
 | --- | --- |
@@ -187,7 +184,7 @@ UDS response SID: 0x62 Containing: F1 90 31 47 31 ...
 Enter CMD
 ```
 
-A rejected request prints the decoded NRC for example `UDS rejected: Service not supported`.
+A rejected request prints the decoded NRC for example: `UDS rejected: Service not supported`.
 
 ### 3.3 Running the GUI
 
@@ -212,13 +209,13 @@ truth and the host code derives its settings from them instead of duplicating co
 
 Workflow in the app:
 
-1. Pick the ST-Link COM port from the top dropdown (the list refreshes every second).
+1. Pick the ST-Link COM port from the top menu (the list should refresh every second).
 2. Click **Use COM Port**.
-3. Choose a UDS command and click **Send UDS Command**, type hex into the CAN entry and send it,
+3. Choose a UDS command and click **Send UDS Command**, type the CAN data as hex into the CAN entry and then send it,
    or click **Start Receiving CAN Messages** to stream traffic.
 
-The GUI tracks board state and blocks a second command until the firmware has printed its
-`Enter CMD` prompt again, so the device is never handed overlapping requests.
+The GUI tracks board state and will block another command until the board has printed its
+`Enter CMD` prompt again, so the board is not overloaded. 
 
 > Close the GUI before opening a terminal on the same port, and vice versa. Only one process can
 > hold the COM port.
@@ -236,7 +233,7 @@ Testing is currently a work in progress.
 
 ### 3.6 Documentation
 
-API documentation is generated with Doxygen from [doxygen_config](doxygen_config):
+API documentation can be generated with Doxygen from [doxygen_config](doxygen_config):
 
 ```bash
 doxygen doxygen_config
@@ -253,6 +250,6 @@ Output lands in `html/` and `latex/`, both git-ignored. Open `html/index.html` t
 
 ## 4. Credits
 
-ISO-TP segmentation is handled by [isotp-c](https://github.com/SimonCahill/isotp-c), vendored under
-[App/isotp-c/](App/isotp-c/) and adapted to this project's `Status` and logging conventions
+ISO-TP segmentation is handled by [isotp-c](https://github.com/SimonCahill/isotp-c), placed under
+[App/isotp-c/](App/isotp-c/) and wrapped to use this project's `Status` and logging conventions
 through `isotp_port.c` and `isotp_user.c`.
