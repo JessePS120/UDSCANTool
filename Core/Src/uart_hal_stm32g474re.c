@@ -1,50 +1,45 @@
 #include "uart.h"
-#include "cmsis_gcc.h"
+#include "status.h"
 #include "stm32g4xx_hal.h"
 #include "stm32g4xx_nucleo.h"
 #include "interrupt.h"
 #include "led.h"
-#include "timer.h" 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <string.h> 
 
 #define UART_TX_TIMEOUT_MS 100
+
+//Blink periods used to distinguish faults that cannot be reported over UART itself.
+#define UART_PANIC_BLINK_RX_MS 2000U
 
 static volatile uint8_t rxRingBuf[UARTRingBufMaxSize];
 static volatile uint8_t rxRingBufHead = 0;
 static volatile uint8_t rxRingBufTail = 0;
 static volatile uint8_t rxRingBufSize = 0;
 
-typedef enum UARTERROR{
-    BSP_COM_INIT, 
-    HAL_UART_RECEIVE_IT, 
-    HAL_UART_TRANSMIT, 
-}UARTERROR; 
-
-static const uint32_t errorDelaysMs[] = {
-    [BSP_COM_INIT]         = 1000,
-    [HAL_UART_RECEIVE_IT]  = 2000,
-    [HAL_UART_TRANSMIT]    = 3000,
-};
-
-static void LEDBlinkError(uint32_t delayMs){
-    disableInterrupts();
-    while(1){ 
-        toggleLED(); 
-        delayMS(delayMs);
-        toggleLED(); 
-        delayMS(delayMs);
-    } 
+// This function is needed because entering an UART error state will cause interrupts to be disabled. 
+//if this happens, we cannot use HAL_Delay(). 
+static void UARTPanicDelay(uint32_t delayMs){
+    //Approximate; the loop body is a few cycles, which only makes the blink slower than asked.
+    for(uint32_t cycles = (SystemCoreClock / 1000U) * delayMs; cycles > 0U; cycles--){
+        __NOP();
+    }
 }
 
-void UARTError(UARTERROR error){
-    LEDBlinkError(errorDelaysMs[error]);
+//Blink an LED if the UART hardware fails. 
+static void UARTPanic(uint32_t delayMs){
+    enterCritical();
+    while(1){ 
+        toggleLED(); 
+        UARTPanicDelay(delayMs);
+    } 
 }
 
 static uint8_t rxByte = 0;
 
-void UARTInit(void){
+Status UARTInit(void){
     COM_InitTypeDef comInit;
     comInit.BaudRate   = UART_BAUD_RATE;
     comInit.WordLength = COM_WORDLENGTH_8B;
@@ -52,8 +47,9 @@ void UARTInit(void){
     comInit.Parity     = COM_PARITY_NONE;
     comInit.HwFlowCtl  = COM_HWCONTROL_NONE;
 
+    //Not logged here: logging only works once this succeeds, so the caller decides what to do.
     if (BSP_COM_Init(COM1, &comInit) != BSP_ERROR_NONE){
-        UARTError(BSP_COM_INIT);
+        return STATUS_HW_FAULT;
     }
 
     //May need to change this priority later.
@@ -61,8 +57,9 @@ void UARTInit(void){
     HAL_NVIC_EnableIRQ(LPUART1_IRQn);
 
     if (HAL_UART_Receive_IT(&hcom_uart[COM1], &rxByte, 1) != HAL_OK){
-        UARTError(HAL_UART_RECEIVE_IT);
+        return STATUS_HW_FAULT;
     }
+    return STATUS_OK;
 }
 
 void LPUART1_IRQHandler(void){
@@ -77,46 +74,70 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
             rxRingBufTail = (rxRingBufTail + 1) % UARTRingBufMaxSize;
             rxRingBufSize++;
         }
+        //Failing to re-arm leaves the console permanently deaf and there is no path to report it.
         if (HAL_UART_Receive_IT(&hcom_uart[COM1], &rxByte, 1) != HAL_OK){ 
-            UARTError(HAL_UART_RECEIVE_IT); 
+            UARTPanic(UART_PANIC_BLINK_RX_MS); 
         }
     }
 }
 
-void UARTSend(const char *data, uint16_t len, bool isTerminated){
+Status UARTSend(const char *data, uint32_t len, bool isTerminated){
+    if(data == NULL){
+        return STATUS_INVALID_ARG;
+    }
     if(isTerminated){ 
         len = (uint16_t)strlen(data); 
     }
-    if (HAL_UART_Transmit(&hcom_uart[COM1], (const uint8_t *)data, len, UART_TX_TIMEOUT_MS) != HAL_OK){
-        UARTError(HAL_UART_TRANSMIT);
+    if(len == 0U){
+        return STATUS_OK;
     }
+    HAL_StatusTypeDef halStatus = HAL_UART_Transmit(&hcom_uart[COM1], (const uint8_t *)data, len, UART_TX_TIMEOUT_MS);
+    if (halStatus == HAL_TIMEOUT){
+        return STATUS_TIMEOUT;
+    }
+    if (halStatus == HAL_BUSY){
+        return STATUS_BUSY;
+    }
+    if (halStatus != HAL_OK){
+        return STATUS_HW_FAULT;
+    }
+    return STATUS_OK;
 }
 
-bool UARTReceive(char *byte){
+Status UARTReceive(char *byte){
+    if (byte == NULL){
+        return STATUS_INVALID_ARG;
+    }
     if (rxRingBufSize == 0U){
         //No bytes in the ring buffer.
-        return false;
+        return STATUS_NO_DATA;
     }
-    __disable_irq();
-    *byte = rxRingBuf[rxRingBufHead];
+    uint32_t state = enterCritical();
+    *byte = (char)rxRingBuf[rxRingBufHead];
     rxRingBufHead = (rxRingBufHead + 1) % UARTRingBufMaxSize;
     rxRingBufSize--;
-    __enable_irq();
-    return true;
+    exitCritical(state);
+    return STATUS_OK;
 }
 
 void UARTFlushBuf(void){
+    uint32_t state = enterCritical();
     rxRingBufHead = 0; 
     rxRingBufTail = 0; 
     rxRingBufSize = 0; 
+    exitCritical(state);
 }
 
-uint8_t UARTReceiveBuffer(char *buf){
-    uint8_t count;
-    __disable_irq();
-    count = rxRingBufSize;
+Status UARTReceiveBuffer(char *buf, uint32_t *outLen){
+    if (buf == NULL || outLen == NULL){
+        return STATUS_INVALID_ARG;
+    }
+    *outLen = 0;
+
+    uint32_t state = enterCritical();
+    uint32_t count = rxRingBufSize;
     if (count > 0U){
-        uint8_t firstChunkLen = UARTRingBufMaxSize - rxRingBufHead;
+        uint32_t firstChunkLen = UARTRingBufMaxSize - rxRingBufHead;
         if (firstChunkLen > count){
             firstChunkLen = count;
         }
@@ -131,7 +152,8 @@ uint8_t UARTReceiveBuffer(char *buf){
         rxRingBufTail = 0; 
         rxRingBufSize = 0; 
     }
-    __enable_irq();
+    exitCritical(state);
 
-    return count;
+    *outLen = count;
+    return (count > 0U) ? STATUS_OK : STATUS_NO_DATA;
 }

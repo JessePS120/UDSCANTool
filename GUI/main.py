@@ -4,10 +4,19 @@ from enum import Enum
 import time 
 
 class BoardState(Enum): 
+    """!@brief A enum used to represent the state of the microcontroller. 
+    """
     WAITING = 1
     EXECUTING = 2
 
 class CANController(ctk.CTk):
+    """!@brief A class for setting up and controlling the GUI. Inherits from ctk.CTk. 
+    """
+    _PAD = 12
+    _GROUP_GAP = 24
+    _SIDEBAR_W = 260
+    _WIDGET_H = 36
+
     def __init__(self):
         super().__init__()
         self._board_state = BoardState.EXECUTING 
@@ -16,47 +25,80 @@ class CANController(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("dark-blue")
         self.geometry("%dx%d+0+0" % (self.winfo_screenwidth(), self.winfo_screenheight())) 
+        self.minsize(640, 400)
         self.title("USBCANTool Controller") 
 
-        #Useful variable for standardization, scaled to the screen size
-        self._widget_w = self.winfo_screenwidth() * 0.166
-        self._widget_h = self.winfo_screenheight() * 0.045
+        self.grid_rowconfigure(0, weight = 1)
+        self.grid_columnconfigure(0, weight = 0, minsize = self._SIDEBAR_W)
+        self.grid_columnconfigure(1, weight = 1)
 
-        #Terminal box initialization 
-        #Custom font for the terminal  
-        term_font = ctk.CTkFont(family = "Times New Roman", size = 24) 
-        self._term_index = 1 
-        self._term = ctk.CTkTextbox(master = self, 
-                                    font = term_font, 
-                                    height = self.winfo_screenheight() / 1.5, 
-                                    width = self.winfo_screenwidth() / 1.5, 
-                                    corner_radius = 0, 
-                                    text_color = "white", 
-                                    state = "disabled"
-                                    ) 
-        self._term.place(relx = 0.5, rely = 0.5, anchor="center")
-        print(self._serial.get_com_list())
+        #Sidebar holds every control so they share one left margin and one width.
+        sidebar = ctk.CTkFrame(self, corner_radius = 0, fg_color = "transparent")
+        sidebar.grid(row = 0, column = 0, sticky = "nsew")
+        sidebar.grid_columnconfigure(0, weight = 1)
+        #Trailing spacer row keeps the controls pinned to the top as the window grows.
+        sidebar.grid_rowconfigure(7, weight = 1)
+
         #Menu Boxes 
         #Com Port Menu Box 
         #No default values because they are loaded periodically. 
-        self._COM_menu = ctk.CTkOptionMenu(self, width = self._widget_w, height = self._widget_h, anchor = "s",  
+        self._COM_menu = ctk.CTkOptionMenu(sidebar, height = self._WIDGET_H, anchor = "center",  
                                          command = None)
         self._last_COM_values = []
-        self._COM_menu.place(relx = 0, rely = 0.160, anchor = "nw")
+        self._COM_menu.grid(row = 0, column = 0, sticky = "ew", padx = self._PAD, pady = (self._PAD, 4))
+        #COM Port Use Button
+        COM_use_but = ctk.CTkButton(sidebar, text = "Use COM Port", height = self._WIDGET_H, command = self._use_COM_port)
+        COM_use_but.grid(row = 1, column = 0, sticky = "ew", padx = self._PAD, pady = (0, self._GROUP_GAP))
+
         #UDS Options Menu Box 
         #TO-DO: Will need to load these values from another file that contains all of the avilable UDS commands. 
-        self._UDS_menu = ctk.CTkOptionMenu(self, values=["TESTERPRESENT", "VIN"], width = self._widget_w, height = self._widget_h, anchor = "s",  
+        self._UDS_menu = ctk.CTkOptionMenu(sidebar, values=["TESTERPRESENT", "VIN"], height = self._WIDGET_H, anchor = "center",  
                                          command = None)
         self._UDS_menu.set("TESTERPRESENT") 
-        self._UDS_menu.place(relx = 0, rely = 0.45, anchor = "nw")
-
-        #Buttons 
-        #COM Port Use Button
-        COM_use_but = ctk.CTkButton(self, text = "Use COM Port", width = self._widget_w, height = self._widget_h, command = self.use_COM_port)
-        COM_use_but.place(relx = 0, rely = 0.205, anchor = "nw")
+        self._UDS_menu.grid(row = 2, column = 0, sticky = "ew", padx = self._PAD, pady = (0, 4))
         #UDS Send Button 
-        UDS_send_but = ctk.CTkButton(self, text = "Send UDS Command", width = self._widget_w, height = self._widget_h, command = self.send_UDS)
-        UDS_send_but.place(relx = 0, rely = 0.495, anchor = "nw")
+        UDS_send_but = ctk.CTkButton(sidebar, text = "Send UDS Command", height = self._WIDGET_H, command = self._send_UDS)
+        UDS_send_but.grid(row = 3, column = 0, sticky = "ew", padx = self._PAD, pady = (0, self._PAD))
+
+        #CAN Send Box
+        text_font = ctk.CTkFont(family = "Times New Roman", size = 24) 
+        self._CAN_box = ctk.CTkEntry(master = sidebar, 
+                                       font = text_font, 
+                                       height = self._WIDGET_H, 
+                                       corner_radius = 6, 
+                                       text_color = "white", 
+                                        )
+
+        self._CAN_box.grid(row = 4, column = 0, sticky = "ew", padx = self._PAD, pady = (self._PAD, 4))
+        def validate_can_box(e) -> None: 
+                txt = self._CAN_box.get() 
+                if(len(txt) > 8): 
+                    self._CAN_box.delete(8, ctk.END) 
+                    self._term_write("Can messages must be a maximum of 8 bytes!")
+
+        self._CAN_box.bind('<KeyRelease>', validate_can_box)
+
+        #CAN Send Button 
+        CAN_send_but = ctk.CTkButton(sidebar, text = "Send CAN Message", height = self._WIDGET_H, command = self._send_CAN)
+        CAN_send_but.grid(row = 5, column = 0, sticky = "ew", padx = self._PAD, pady = (0, self._PAD))
+
+        #Terminal box initialization 
+        #Custom font for the terminal  
+        self._term_index = 1 
+        #No fixed width/height: the grid cell sizes it, so it tracks the window.
+        self._term = ctk.CTkTextbox(master = self, 
+                                    font = text_font, 
+                                    corner_radius = 6, 
+                                    text_color = "white", 
+                                    state = "disabled"
+                                    ) 
+        #Same top and bottom padding as the sidebar, so the terminal's top edge lines
+        #up with the first control rather than floating in the middle of the window.
+        self._term.grid(row = 0, column = 1, sticky = "nsew", padx = (0, self._PAD), pady = self._PAD)
+
+        #CAN Receive Button
+        self._CAN_receive_but = ctk.CTkButton(sidebar, text = "Start Receiving CAN Messages", height = self._WIDGET_H, command = self._receive_CAN)
+        self._CAN_receive_but.grid(row = 6, column = 0, sticky = "ew", padx = self._PAD, pady = (0, self._PAD))
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._process_serial()
@@ -86,24 +128,20 @@ class CANController(ctk.CTk):
             self._COM_menu.configure(values = COM_values)
             #Must do some checking here for an empty list. 
             self._COM_menu.set("None Detected" if not COM_values else COM_values[0])
-        self.after(1000, self._update_COM_menu) 
-        return 
+        self.after(1000, self._update_COM_menu)  
 
     #Periodic serial read function 
     def _process_serial(self) -> None: 
         if(self._serial.bytes_ready): 
             txt = self._serial.read_line()
-            self._term_write(txt) 
-            if(txt == "Would you like to send/receive a message(s) over CAN Classic or ISOTP?(CANS/CANR/ISOTPS/ISOTPR/UDS)"): 
+            if(txt == "Enter CMD" or ("ERROR:" in txt)): 
                 self._board_state = BoardState.WAITING
-            else: 
-                #Pipe output to GUI terminal. 
-                #self._term_write(txt)
-                pass 
+            if(txt != "Enter CMD"): 
+                self._term_write(txt) 
         self.after(100, self._process_serial) 
 
     #Button Functions
-    def use_COM_port(self) -> None: 
+    def _use_COM_port(self) -> None: 
         COM_value = self._COM_menu.get()
         if(COM_value != "None Detected"): 
             #Doing this to catch any errors produced by pyserial. 
@@ -111,32 +149,53 @@ class CANController(ctk.CTk):
                 self._serial.connect(COM_value)
                 self._term_write(f"Connected to {COM_value}")
                 time.sleep(0.050)
-                self._serial.send("Hi\r\n")  
+                self._board_state = BoardState.WAITING 
             except Exception as e:
                 self._term_write(f"Problem using that COM port, try another!")
         else: 
             self._term_write("Please select a valid COM port!")
-        return 
-         
-    def send_UDS(self) -> None: 
-        if self._serial.is_connected: 
+
+    #Send functions(called after a button is pressed) 
+    def _send_check(self) -> bool: 
+        if self._serial.is_connected:
             if self._board_state != BoardState.WAITING: 
                 self._term_write("Please wait until the board is finished executing its current command!")
             else: 
-                self._board_state = BoardState.EXECUTING
-                self._serial.send(self, "UDS\r\n") 
-                time.sleep(0.250) 
-                self._term_write(self._UDS_menu.get())
+                return True 
         else: 
             self._term_write("Please connect to a COM port before sending a command!")
-        return 
+        return False  
+         
+    def _send_UDS(self) -> None: 
+        if self._send_check(): 
+            self._board_state = BoardState.EXECUTING
+            self._term_write("Sending UDS:" + self._UDS_menu.get())
+            self._serial.send("UDS:" + self._UDS_menu.get())
+
+    def _send_CAN(self) -> None: 
+        if self._send_check(): 
+            self._board_state = BoardState.EXECUTING
+            self._term_write("Sending CANS:" + self._CAN_box.get())
+            self._serial.send("CANS:" + self._CAN_box.get())
+
+    def _receive_CAN(self) -> None: 
+        if self._CAN_receive_but.cget("text") == "Start Receiving CAN Messages": 
+            if self._send_check(): 
+                self._board_state = BoardState.EXECUTING
+                self._term_write("Sending CANR:")
+                self._serial.send("CANR:")
+                self._CAN_receive_but.configure(text = "Stop Receiving CAN Messages")
+        else: 
+            #We can send any character here. 
+            self._term_write("S") 
+            self._term_write("Stopping CAN Receiving") 
+            self._CAN_receive_but.configure(text = "Start Receiving CAN Messages")
 
 def main() -> None:
     controller = CANController()
     try:
         controller.mainloop()
     finally:
-        #Backstop for exit paths that skip _on_close (e.g. Ctrl+C, uncaught exceptions).
         controller._serial.close()
     return
 

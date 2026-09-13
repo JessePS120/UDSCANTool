@@ -4,11 +4,12 @@ import serial.tools.list_ports
 from Contract import macro
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_UART_HEADER = os.path.join(_REPO_ROOT, "App", "Inc", "uart.h")
+_UART_HEADER = os.path.join(_REPO_ROOT, "App", "uart", "uart.h")
 
 class SerialLayer:
+    """!@brief Class wrapper around the serial library. 
+    """
     #TODO: Need some platform specific code here for the serial port.
-    #Pulled directly from App/Inc/uart.h so the two stay in sync.
     BAUD_RATE = int(macro.read_c_macro(_UART_HEADER, "UART_BAUD_RATE"))
 
     def __init__(self) -> None:
@@ -26,9 +27,9 @@ class SerialLayer:
     @property 
     def bytes_ready(self) -> bool: 
         if self.is_connected: 
-            return self._ser.in_waiting
+            return (bool)(self._ser.in_waiting) 
 
-    def connect(self, port: str) -> None:
+    def connect(self, port : str) -> None:
         #Only one connection at a time for now.
         self.close()
         self._ser = serial.Serial(port, self.BAUD_RATE, timeout=1)
@@ -38,10 +39,11 @@ class SerialLayer:
             self._ser.close()
             self._ser = None
 
-    def send(self, data: str) -> None:
+    def send(self, data : str) -> None:
+        data = data + "\r\n" 
         if not self.is_connected:
             raise RuntimeError("Not connected to a serial port.")
-        self._ser.write(str.encode('utf-8'))
+        self._ser.write(data.encode('utf-8'))
 
     def read_line(self) -> str:
         if not self.is_connected:
