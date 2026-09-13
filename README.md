@@ -1,7 +1,7 @@
 # UDSCANTool
 
-This repo contains code for a standalone UDS (ISO 14229-1) diagnostic tester built for a STM32 Nucleo-G474RE. The nucleo board
-can generated UDS messages over ISO-TP (ISO 15765-2) on a CAN 2.0B bus, and is interactable vai a
+This repo contains code for a UDS (ISO 14229-1) diagnostic tester built for a STM32 Nucleo-G474RE. The nucleo board
+can generated UDS messages over ISO-TP (ISO 15765-2) on a CAN 2.0B bus, and is interactable via a
 serial terminal or from the included Python GUI over the ST-Link virtual port.
 
 ---
