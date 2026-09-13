@@ -1,4 +1,4 @@
-# UDS-over-CAN Device — Project Requirements (v0.1) 
+# UDS-over-CAN Device — Project Requirements (v0.2) 
 
 ## 1. Project Goal
 
@@ -34,7 +34,7 @@ human-readable form over a debug/host interface.
 ## 3. Functional Requirements 
 ### 3.1 CAN Link Layer 
 - R-1: Client shall transmit and recieve 11-bit CAN 2.0B frames(phase 1) or 29 bit CAN 2.0B frames(phase 2). 
-- R-2: Client shall be able to switch CAN baud rate at build time(phase 2). 
+- R-2: Client shall be able to switch CAN baud rate at build time and via the terminal(phase 2). 
 - R-3: Receiving CAN messages **MUST** be interrupt driven to avoid polling as CAN messages would easily overwhelm the CPU(phase 1). 
 - R-4: Client shall use a device filter to filter out undesirable CAN messages(phase 1) configurable at build time or via the UART/USB interface(phase 2). 
 
@@ -46,9 +46,12 @@ human-readable form over a debug/host interface.
 - R-9: Client shall allow physical (1-to-1) addressing(phase 1) and (1-to-many) addressing(phase 2).
 
 ### 3.3 UDS Application Layer(Work In Progress). 
+- R-10: Client shall implement support for sending UDS messages with the correct format(PCI byte, SID byte, Sub function byte, Data parameters...) according to ISO 14229. This layer shall be built on top of the ISO-TP transport layer(phase 1). 
+- R-11: Client shall implement support for sending test present and VIN requests vis UDS(phase 1). 
+- R-12: Client shall implement basic UDS commands(TODO: define list of commands)(phase 1 & 3). 
 
 ### 3.4 UART/USB Interface 
-- R-10: Client shall expose a UART to USB interface that: 
+- R-13: Client shall expose a UART to USB interface that: 
     1. Allows the host to issue support UDS requests with user provided parameters(phase 1). 
     2. View the response from UDS requests(phase 1) and log the data(phase 2). 
     3. Customize the client(Work In Progress)(phase 2 and 3): 
@@ -58,7 +61,7 @@ human-readable form over a debug/host interface.
     4. Has a corresponding host GUI that allows the user to issue commands and view data(phase 3). 
 
 ### 3.5 Hardware Specific 
-- R-11: All client code shall include wrappers around HAL code provided STM32 Cube IDE. 
+- R-15: All client code shall include wrappers around HAL code provided STM32 Cube IDE. 
 
 ### 3.6 Testing and Validation Plan(Work In Progress). 
 
@@ -68,3 +71,4 @@ human-readable form over a debug/host interface.
 - Twisted pair wires. 
 - Two 120ohm termination resistors. 
 - CANable(for testing). 
+ 
