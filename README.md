@@ -126,8 +126,7 @@ Transceiver power: `3V3` and `GND` from the Nucleo's Morpho/Arduino headers.
 
 Configured in [can_hal_stm32g474re.c](Core/Src/can_hal_stm32g474re.c): FDCAN is clocked from
 PCLK1 at 170 MHz, prescaler 10, giving a 34 tq bit time (`TimeSeg1 = 29`, `TimeSeg2 = 4`,
-`SJW = 4`) for **500 kbit/s** with the sample point at roughly 88%. Frame format is classic CAN
-with bit-rate switching off.
+`SJW = 4`) for **500 kbit/s**. 
 
 ## 3. Building and running
 
