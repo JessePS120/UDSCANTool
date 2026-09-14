@@ -33,18 +33,27 @@ Status CANInit(void)
     hfdcan.Init.AutoRetransmission = DISABLE;
     hfdcan.Init.TransmitPause = DISABLE;
     hfdcan.Init.ProtocolException = ENABLE;
-    /* 500 kbit/s: FDCAN is clocked from PCLK1 at 170 MHz, so a 34 tq bit
-     * (1 sync + 29 + 4) with a prescaler of 10 gives 170e6 / 10 / 34 exactly.
-     * The sample point lands at 88.2%. */
+
+    //Using PCKL1 which is clocked at 170MHz = 1/(170 * 10^6) s 
+    //Baud rate = 1 / bit time. 
+    //tq = (NBRP[8:0] + 1) x tfdcan_tq_clk
+    //Bit time = tq(1 + (NTSEG1[7:0] + 1) + (NTSEG2[6:0] + 1)) 
+    //Using the values below
+    // Bit time = 1 / ((10 + 1) * 1/(170 * 10^6)(1 + (29) + (4)))
+    // Bit time = 1 / ((10) * 1/(170 * 10^6)(1 + (29 + 4) = 500KBaud 
+
+    //NBRP + 1 
     hfdcan.Init.NominalPrescaler = 10;
     hfdcan.Init.NominalSyncJumpWidth = 4;
+    //NTSEG1 + 1
     hfdcan.Init.NominalTimeSeg1 = 29;
+    //NTSEG2 + 1
     hfdcan.Init.NominalTimeSeg2 = 4;
     hfdcan.Init.DataPrescaler = 1;
     hfdcan.Init.DataSyncJumpWidth = 1;
     hfdcan.Init.DataTimeSeg1 = 13;
     hfdcan.Init.DataTimeSeg2 = 3;
-    //No hardware acceptance filters are configured; see the global filter below.
+    //No hardware acceptance filters are configured. 
     hfdcan.Init.StdFiltersNbr = 0;
     hfdcan.Init.ExtFiltersNbr = 0;
     hfdcan.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
